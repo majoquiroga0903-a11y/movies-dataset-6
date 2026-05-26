@@ -584,6 +584,7 @@ if st.session_state.get("role") == "admin":
     st.sidebar.markdown("## Panel Admin")
     admin_buttons = [
         "Dashboard",
+        "Ventas",
         "Usuarios",
         "Clientes (Historial)",
         "Hoteles",
@@ -829,63 +830,54 @@ if show_records:
     else:
         st.info("No hay ventas registradas aún.")
 
-col1, col2 = st.columns([2, 1])
+# Mostrar bloque de ventas/resultado solo si no estamos en una sección admin distinta de 'Ventas'
+show_sales = True
+if st.session_state.get("role") == "admin":
+    if st.session_state.get("admin_section") and st.session_state.get("admin_section") != "Ventas":
+        show_sales = False
 
-with col1:
-    st.subheader("Resultado")
+if show_sales:
+    col1, col2 = st.columns([2, 1])
 
-    if califica:
-        st.success(
-            f"Cliente: {cliente or 'No ingresado'}\n\n"
-            f"Califica para: {paquete}\n\n"
-            f"Vigencia: {vigencia}"
-        )
-    else:
-        st.error(
-            f"Cliente: {cliente or 'No ingresado'}\n\n"
-            f"Enviar a MIX & MATCH\n\n"
-            f"{motivo}"
-        )
+    with col1:
+        st.subheader("Ventas")
 
-    if beneficios:
-        st.subheader("Beneficios sugeridos")
-        for beneficio in beneficios:
-            st.write(f"• {beneficio}")
+        st.markdown(f"**Cliente:** {cliente or ''}")
+        st.markdown(f"**Paquete ideal:** {paquete}")
+        st.markdown(f"**Vigencia:** {vigencia}")
+        st.markdown(f"**Deducible:** ${deducible}")
 
-    if destinos_recomendados:
-        st.subheader("Destinos recomendados")
-        st.write(", ".join(destinos_recomendados))
+        st.markdown("---")
+        st.markdown("**Zona y horario**")
+        st.markdown(f"Zona detectada: {zona}")
+        st.markdown(f"Horario: {horarios.get(zona, 'N/A')}")
 
-    if cruceros_recomendados:
-        st.subheader("Cruceros recomendados")
-        st.write(", ".join(cruceros_recomendados))
+        st.markdown("---")
+        st.markdown("**Destinos y hoteles disponibles**")
+        for ciudad, lista_hoteles in hoteles.items():
+            st.markdown(f"- {ciudad}")
+            for hotel_item in lista_hoteles:
+                st.write(f"  - {hotel_item}")
 
-    st.subheader("Hoteles por ciudad")
-    for ciudad, lista_hoteles in hoteles.items():
-        st.markdown(f"**{ciudad}**")
-        for hotel_item in lista_hoteles:
-            st.write(f"- {hotel_item}")
+        st.markdown("---")
+        st.subheader("Speech")
+        if califica:
+            st.write(
+                "El cliente califica para un paquete especial. Puede comunicarle que el viaje ya está aprobado y que solo necesita cubrir el deducible para comenzar a reservar. Recuérdale que este paquete ofrece una vigencia amplia y un plan diseñado para maximizar su experiencia de vacaciones con el menor esfuerzo posible."
+            )
+        else:
+            st.write(
+                "El cliente no cumple los requisitos para los paquetes preferenciales en este momento. Ofrece la alternativa MIX & MATCH, destacando los beneficios del plan y la posibilidad de mantener el interés mientras se busca una opción adecuada."
+            )
 
-with col2:
-    st.subheader("Zona y horario")
-    st.info(f"Zona detectada: {zona}\nHorario: {horarios[zona]}")
+    with col2:
+        st.subheader("Comisión")
+        st.markdown(f"**Total:** ${total:,.2f} USD")
+        st.markdown(f"**Ganancia por unidad:** ${ganancia:,.2f}")
 
-    st.subheader("Comisión")
-    st.write(f"Total: ${total:,.2f} USD")
-    st.write(f"Ganancia por unidad: ${ganancia:,.2f}")
-
-    st.subheader("Speech")
-    if califica:
-        st.success(
-            "El cliente califica para un paquete especial. Puede comunicarle que el viaje ya está aprobado y que solo necesita cubrir el deducible para comenzar a reservar. Recuérdale que este paquete ofrece una vigencia amplia y un plan diseñado para maximizar su experiencia de vacaciones con el menor esfuerzo posible."
-        )
-    else:
-        st.warning(
-            "El cliente no cumple los requisitos para los paquetes preferenciales en este momento. Ofrece la alternativa MIX & MATCH, destacando los beneficios del plan y la posibilidad de mantener el interés mientras se busca una opción adecuada."
-        )
-
-    if st.session_state["message"]:
-        st.success(st.session_state["message"])
+        st.markdown("---")
+        if st.session_state["message"]:
+            st.success(st.session_state["message"])
 
 st.markdown(
 """
