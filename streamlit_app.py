@@ -172,23 +172,36 @@ FOLLOWUPS = load_json(FOLLOWUPS_FILE, [])
 
 
 def persist_users():
+    global USERS
     save_json(USERS_FILE, USERS)
+    # recargar
+    USERS = load_json(USERS_FILE, {})
 
 
 def persist_hoteles():
+    global hoteles
     save_json(HOTELES_FILE, hoteles)
+    hoteles = load_json(HOTELES_FILE, {})
 
 
 def persist_packages():
+    global PACKAGES
     save_json(PACKAGES_FILE, PACKAGES)
+    PACKAGES = load_json(PACKAGES_FILE, {})
 
 
 def persist_config():
+    global CONFIG, zonas, horarios
     save_json(CONFIG_FILE, CONFIG)
+    CONFIG = load_json(CONFIG_FILE, {})
+    zonas = CONFIG.get("zonas", zonas)
+    horarios = CONFIG.get("horarios", horarios)
 
 
 def persist_followups():
+    global FOLLOWUPS
     save_json(FOLLOWUPS_FILE, FOLLOWUPS)
+    FOLLOWUPS = load_json(FOLLOWUPS_FILE, {})
 
 
 def load_sales():
@@ -353,6 +366,16 @@ def compute_package(
             ]
         else:
             motivo = "No cumple los requisitos de edad o hijos para ningún paquete"
+    # Si el admin definió valores para paquetes en PACKAGES, aplicarlos (vigencia, beneficios, destinos)
+    pkg_meta = PACKAGES.get(paquete, {}) if isinstance(PACKAGES, dict) else {}
+    if pkg_meta:
+        vigencia = pkg_meta.get("vigencia", vigencia)
+        if "beneficios" in pkg_meta:
+            beneficios = pkg_meta.get("beneficios") or beneficios
+        if "destinos" in pkg_meta:
+            destinos_recomendados = pkg_meta.get("destinos") or destinos_recomendados
+        if "cruceros" in pkg_meta:
+            cruceros_recomendados = pkg_meta.get("cruceros") or cruceros_recomendados
 
     return (
         califica,
