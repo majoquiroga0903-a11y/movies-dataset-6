@@ -48,10 +48,10 @@ if not st.session_state["authenticated"]:
             st.session_state["user_fullname"] = user["name"]
             st.session_state["role"] = user["role"]
             st.session_state["message"] = f"Bienvenido {user['name']}"
-            st.experimental_rerun()
         else:
             st.error("Usuario o contraseña incorrectos.")
-    st.stop()
+    if not st.session_state["authenticated"]:
+        st.stop()
 
 # -----------------------------------
 # BASE DE DATOS
@@ -63,68 +63,13 @@ zonas = {
     "Arizona": "Costa Oeste",
     "Arkansas": "Zona Central",
     "California": "Costa Oeste",
-    "Colorado": "Costa Oeste",
+    "Colorado": "Zona Central",
     "Connecticut": "Costa Este",
     "Delaware": "Costa Este",
     "Florida": "Costa Este",
-    "Georgia": "Costa Este",
-    "Hawaii": "Costa Oeste",
-    "Idaho": "Costa Oeste",
-    "Illinois": "Costa Este",
-    "Indiana": "Costa Este",
-    "Iowa": "Zona Central",
-    "Kansas": "Zona Central",
-    "Kentucky": "Costa Este",
-    "Louisiana": "Zona Central",
-    "Maine": "Costa Este",
-    "Maryland": "Costa Este",
-    "Massachusetts": "Costa Este",
-    "Michigan": "Costa Este",
-    "Minnesota": "Zona Central",
-    "Mississippi": "Costa Este",
-    "Missouri": "Zona Central",
-    "Montana": "Costa Oeste",
-    "Nebraska": "Zona Central",
-    "Nevada": "Costa Oeste",
-    "New Hampshire": "Costa Este",
-    "New Jersey": "Costa Este",
-    "New Mexico": "Costa Oeste",
-    "New York": "Costa Este",
-    "North Carolina": "Costa Este",
-    "North Dakota": "Zona Central",
-    "Ohio": "Costa Este",
-    "Oklahoma": "Zona Central",
-    "Oregon": "Costa Oeste",
-    "Pennsylvania": "Costa Este",
-    "Rhode Island": "Costa Este",
-    "South Carolina": "Costa Este",
-    "South Dakota": "Zona Central",
-    "Tennessee": "Costa Este",
-    "Texas": "Zona Central",
-    "Utah": "Costa Oeste",
-    "Vermont": "Costa Este",
-    "Virginia": "Costa Este",
-    "Washington": "Costa Oeste",
-    "West Virginia": "Costa Este",
-    "Wisconsin": "Costa Este",
-    "Wyoming": "Costa Oeste",
-    "Puerto Rico": "Puerto Rico"
 }
 
-hoteles = {
-    "Orlando": ["Avanti", "Buena Vista Suites"],
-    "Vegas": ["Tuscany Suites"],
-    "Cancún": ["Oasis Palm Lite", "Villa del Palmar"],
-    "Punta Cana": ["Ancora"]
-}
-
-horarios = {
-    "Costa Oeste": "6 AM - 2 PM",
-    "Zona Central": "7 AM - 4 PM",
-    "Costa Este": "9 AM - 5 PM",
-    "Puerto Rico": "10 AM - 5 PM"
-}
-
+# Archivo de ventas y campos
 SALES_FILE = "sales_records.csv"
 FIELDNAMES = [
     "timestamp",
@@ -148,7 +93,7 @@ FIELDNAMES = [
     "beneficios",
     "destinos_recomendados",
     "cruceros_recomendados",
-    "asesor"
+    "asesor",
 ]
 
 
@@ -157,6 +102,21 @@ def ensure_sales_file():
         with open(SALES_FILE, mode="w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
             writer.writeheader()
+
+
+# Hoteles de ejemplo por ciudad
+hoteles = {
+    "Cancún": ["Hotel Azul", "Resort Playa"],
+    "Punta Cana": ["Resort Caribe"],
+    "Puerto Vallarta": ["Hotel Pacifico"],
+}
+
+# Horarios por zona
+horarios = {
+    "Costa Este": "9:00 - 18:00",
+    "Costa Oeste": "8:00 - 17:00",
+    "Zona Central": "8:30 - 17:30",
+}
 
 
 def load_sales():
@@ -194,6 +154,7 @@ def compute_package(
     cantidad_hijos,
     edades_hijos
 ):
+    # Valores por defecto
     califica = False
     paquete = "MIX & MATCH"
     vigencia = "24 meses"
@@ -202,34 +163,39 @@ def compute_package(
     destinos_recomendados = []
     cruceros_recomendados = []
 
-    if residencia == "Sí":
+    # Helpers locales
+    residencia_flag = (residencia == "Sí")
+
+    # Reglas para residentes
+    if residencia_flag:
         if estado_civil == "Casado / Convive":
-            if 30 <= edad <= 70:
-                if hijos_validos_vdl(edades_hijos):
-                    califica = True
-                    paquete = "VDL"
-                    vigencia = "12 meses reservar / 18 vacacionar"
-                    beneficios = [
-                        "All inclusive",
-                        "3 comidas incluidas",
-                        "Bebidas alcohólicas y no alcohólicas",
-                        "Transporte aeropuerto-hotel",
-                        "90 min Time Share sin compromiso"
-                    ]
-                    destinos_recomendados = [
-                        "Cancún",
-                        "Punta Cana",
-                        "Puerto Vallarta",
-                        "Los Cabos",
-                        "Bahamas",
-                        "Costa Rica"
-                    ]
-                    cruceros_recomendados = [
-                        "Crucero Caribe 5N/4D",
-                        "Crucero Riviera Maya 7N/6D"
-                    ]
-        elif estado_civil == "Mujer Soltera":
-            if 25 <= edad <= 70:
+            # Rango de edad permitido para VDL y validación de hijos
+            if 25 <= edad <= 79 and hijos_validos_vdl(edades_hijos):
+                califica = True
+                paquete = "VDL"
+                vigencia = "12 meses reservar / 18 vacacionar"
+                beneficios = [
+                    "All inclusive",
+                    "3 comidas incluidas",
+                    "Bebidas alcohólicas y no alcohólicas",
+                    "Transporte aeropuerto-hotel",
+                    "90 min Time Share sin compromiso"
+                ]
+                destinos_recomendados = [
+                    "Cancún",
+                    "Punta Cana",
+                    "Puerto Vallarta",
+                    "Los Cabos",
+                    "Bahamas",
+                    "Costa Rica"
+                ]
+                cruceros_recomendados = [
+                    "Crucero Caribe 5N/4D",
+                    "Crucero Riviera Maya 7N/6D"
+                ]
+
+        if estado_civil == "Mujer Soltera":
+            if 25 <= edad <= 72:
                 califica = True
                 paquete = "HÍBRIDO"
                 vigencia = "12 meses reservar / 18 vacacionar"
@@ -247,7 +213,8 @@ def compute_package(
                     "Crucero Bahamas 5N/4D",
                     "Crucero Panamá 8N/7D"
                 ]
-        elif estado_civil == "Hombre Soltero":
+
+        if estado_civil == "Hombre Soltero":
             if 35 <= edad <= 59:
                 califica = True
                 paquete = "VDL"
@@ -267,29 +234,52 @@ def compute_package(
                     "Crucero Bahía Mar 6N/5D"
                 ]
 
-    if not califica:
-        if edad >= 18:
-            if hijos_validos_mix(edades_hijos):
-                paquete = "MIX & MATCH"
+        if estado_civil == "Divorciado":
+            if 25 <= edad <= 72:
+                califica = True
+                paquete = "HÍBRIDO"
+                vigencia = "12 meses reservar / 18 vacacionar"
                 beneficios = [
-                    "Sin Time Share",
-                    "Open 4/3",
-                    "Crucero 5/4",
-                    "12 meses para reservar",
-                    "2 destinos"
+                    "1 destino VDL",
+                    "2 destinos Mix & Match",
+                    "Time Share 90 minutos"
                 ]
                 destinos_recomendados = [
-                    "Bahamas",
-                    "México",
-                    "Las Vegas",
-                    "Phoenix",
-                    "Los Ángeles",
-                    "San Diego"
+                    "Cancún",
+                    "Vegas",
+                    "Orlando"
                 ]
                 cruceros_recomendados = [
-                    "Crucero Bahamas 5N/4D",
-                    "Crucero Miami 4N/3D"
+                    "Crucero Bahamas 5N/4D"
                 ]
+
+    # Si no calificó para paquetes preferenciales o no es residente
+    if not califica:
+        # Reglas generales para MIX & MATCH: edad mínima y validación de hijos
+        if edad >= 18 and hijos_validos_mix(edades_hijos):
+            paquete = "MIX & MATCH"
+            vigencia = "12 meses para reservar / 18 vacacionar"
+            beneficios = [
+                "Sin Time Share",
+                "Open 4/3",
+                "Crucero 5/4",
+                "12 meses para reservar",
+                "2 destinos"
+            ]
+            destinos_recomendados = [
+                "Bahamas",
+                "México",
+                "Las Vegas",
+                "Phoenix",
+                "Los Ángeles",
+                "San Diego"
+            ]
+            cruceros_recomendados = [
+                "Crucero Bahamas 5N/4D",
+                "Crucero Miami 4N/3D"
+            ]
+        else:
+            motivo = "No cumple los requisitos de edad o hijos para ningún paquete"
 
     return (
         califica,
@@ -369,7 +359,7 @@ if st.sidebar.button("Cerrar sesión"):
     st.session_state["user_fullname"] = ""
     st.session_state["role"] = ""
     st.session_state["message"] = ""
-    st.experimental_rerun()
+    st.stop()
 
 cliente = st.sidebar.text_input("Nombre del cliente", key="cliente")
 
