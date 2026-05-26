@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 
 import streamlit as st
+import json
 
 # -----------------------------------
 # CONFIGURACIÓN
@@ -104,6 +105,30 @@ def ensure_sales_file():
             writer.writeheader()
 
 
+# Persistencia simple para usuarios, hoteles, paquetes y seguimiento
+USERS_FILE = "users.json"
+HOTELES_FILE = "hoteles.json"
+PACKAGES_FILE = "packages.json"
+CONFIG_FILE = "config.json"
+FOLLOWUPS_FILE = "followups.json"
+
+
+def load_json(path, default):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
+    else:
+        return default
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 # Hoteles de ejemplo por ciudad
 hoteles = {
     "Cancún": ["Hotel Azul", "Resort Playa"],
@@ -117,6 +142,53 @@ horarios = {
     "Costa Oeste": "8:00 - 17:00",
     "Zona Central": "8:30 - 17:30",
 }
+
+
+# Cargar o inicializar datos persistentes
+USERS = load_json(USERS_FILE, USERS)
+hoteles = load_json(HOTELES_FILE, hoteles)
+PACKAGES = load_json(PACKAGES_FILE, {
+    "VDL": {
+        "vigencia": "12 meses reservar / 18 vacacionar",
+        "requisitos": "Residente, Casado/Convive, edades permitidas",
+    },
+    "HÍBRIDO": {
+        "vigencia": "12 meses reservar / 18 vacacionar",
+        "requisitos": "Mujer soltera o divorciado, rango de edad",
+    },
+    "MIX & MATCH": {
+        "vigencia": "12 meses para reservar / 18 vacacionar",
+        "requisitos": "Edad >=18, hijos hasta 17",
+    }
+})
+
+CONFIG = load_json(CONFIG_FILE, {
+    "horarios": horarios,
+    "zonas": zonas,
+    "porcentaje_default": 0.06,
+})
+
+FOLLOWUPS = load_json(FOLLOWUPS_FILE, [])
+
+
+def persist_users():
+    save_json(USERS_FILE, USERS)
+
+
+def persist_hoteles():
+    save_json(HOTELES_FILE, hoteles)
+
+
+def persist_packages():
+    save_json(PACKAGES_FILE, PACKAGES)
+
+
+def persist_config():
+    save_json(CONFIG_FILE, CONFIG)
+
+
+def persist_followups():
+    save_json(FOLLOWUPS_FILE, FOLLOWUPS)
 
 
 def load_sales():
@@ -510,8 +582,221 @@ if register_click:
 # INTERFAZ
 # -----------------------------------
 
-st.title("Cerrador Pro")
+st_title_str = "Deal"
+st.title(st_title_str)
 st.write("Sistema de calificación y registro de ventas para paquetes vacacionales.")
+
+# --- Panel admin (solo visible para role == 'admin')
+if st.session_state.get("role") == "admin":
+    st.sidebar.markdown("## Panel Admin")
+    admin_buttons = [
+        "Dashboard",
+        "Usuarios",
+        "Clientes (Historial)",
+        "Hoteles",
+        "Paquetes",
+        "Comisiones",
+        "Estadísticas",
+        "Seguimiento",
+        "Configuración",
+    ]
+
+    # Inicializar sección admin en session_state
+    if "admin_section" not in st.session_state:
+        st.session_state["admin_section"] = "Dashboard"
+
+    for name in admin_buttons:
+        if st.sidebar.button(name):
+            st.session_state["admin_section"] = name
+
+    st.sidebar.markdown("---")
+
+    admin_section = st.session_state.get("admin_section", "Dashboard")
+
+    if admin_section == "Dashboard":
+        st.subheader("Dashboard rápido")
+        ventas = load_sales()
+        total_ventas = len(ventas)
+        total_ingresos = sum(float(v.get("total") or 0) for v in ventas)
+        hoy = datetime.now().date().isoformat()
+        ventas_hoy = sum(1 for v in ventas if v.get("timestamp", "")[:10] == hoy)
+
+        # Mejor asesor del mes
+        from collections import Counter
+        now = datetime.now()
+        ym = f"{now.year}-{now.month:02d}"
+        ventas_mes = [v for v in ventas if v.get("timestamp", "")[:7] == ym]
+        mejor_asesor = None
+        if ventas_mes:
+            asesores_mes = [v.get("asesor") for v in ventas_mes if v.get("asesor")]
+            if asesores_mes:
+                mejor_asesor = Counter(asesores_mes).most_common(1)[0][0]
+        porcentaje_conversion = None
+        if total_ventas > 0:
+            porcentaje_conversion = f"{(len(ventas_mes)/total_ventas*100):.1f}%"
+
+        st.metric("Total ventas", total_ventas)
+        st.metric("Ingresos totales (USD)", f"${total_ingresos:,.2f}")
+        st.metric("Ventas hoy", ventas_hoy)
+        st.write(f"Mejor asesor del mes: {mejor_asesor or 'N/A'}")
+        st.write(f"Porcentaje de ventas este mes vs totales: {porcentaje_conversion or 'N/A'}")
+
+    if admin_section == "Usuarios":
+        st.subheader("Gestión de usuarios")
+        users_list = [{"username": k, **v} for k, v in USERS.items()]
+        st.dataframe(users_list)
+
+        st.markdown("**Crear asesor**")
+        new_user = st.text_input("Usuario (username)", key="new_user")
+        new_name = st.text_input("Nombre completo", key="new_name")
+        new_pass = st.text_input("Contraseña", type="password", key="new_pass")
+        if st.button("Crear asesor"):
+            if not new_user or not new_pass:
+                st.error("Usuario y contraseña obligatorios")
+            else:
+                USERS[new_user] = {"name": new_name or new_user, "role": "asesor", "password": new_pass}
+                persist_users()
+                st.success("Asesor creado")
+
+        st.markdown("**Modificar / eliminar usuario**")
+        sel_user = st.selectbox("Seleccionar usuario", sorted(list(USERS.keys())), key="sel_user")
+        if sel_user:
+            info = USERS.get(sel_user, {})
+            st.write(info)
+            if st.button("Borrar usuario"):
+                if sel_user == st.session_state.get("username"):
+                    st.error("No puede borrarse a sí mismo")
+                else:
+                    USERS.pop(sel_user, None)
+                    persist_users()
+                    st.success("Usuario eliminado")
+
+            new_pw = st.text_input("Nueva contraseña", type="password", key="chg_pw")
+            if st.button("Cambiar contraseña"):
+                if new_pw:
+                    USERS[sel_user]["password"] = new_pw
+                    persist_users()
+                    st.success("Contraseña actualizada")
+                else:
+                    st.error("Ingrese una contraseña válida")
+
+            bloquear = st.checkbox("Bloquear cuenta", value=USERS.get(sel_user, {}).get("blocked", False), key="block")
+            if st.button("Aplicar bloqueo"):
+                USERS[sel_user]["blocked"] = bloquear
+                persist_users()
+                st.success("Estado de bloqueo actualizado")
+
+    if admin_section == "Clientes (Historial)":
+        st.subheader("Historial completo de clientes")
+        ventas_guardadas = load_sales()
+        st.dataframe(ventas_guardadas)
+
+    if admin_section == "Hoteles":
+        st.subheader("Hoteles y destinos")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("Hoteles por ciudad")
+            for ciudad, lista in hoteles.items():
+                st.write(f"- {ciudad}: {', '.join(lista)}")
+        with col2:
+            ciudad = st.text_input("Ciudad a agregar")
+            hotel = st.text_input("Hotel / Resort a agregar")
+            if st.button("Agregar hotel"):
+                if ciudad and hotel:
+                    hoteles.setdefault(ciudad, [])
+                    hoteles[ciudad].append(hotel)
+                    persist_hoteles()
+                    st.success("Hotel agregado")
+                else:
+                    st.error("Ciudad y hotel requeridos")
+
+            ciudad_del = st.selectbox("Ciudad para eliminar hotel", sorted(list(hoteles.keys())), key="ciudad_del")
+            hotel_del = st.selectbox("Hotel", hoteles.get(ciudad_del, []), key="hotel_del")
+            if st.button("Eliminar hotel seleccionado"):
+                if hotel_del in hoteles.get(ciudad_del, []):
+                    hoteles[ciudad_del].remove(hotel_del)
+                    persist_hoteles()
+                    st.success("Hotel eliminado")
+
+    if admin_section == "Paquetes":
+        st.subheader("Editar paquetes")
+        for key, meta in PACKAGES.items():
+            st.markdown(f"**{key}**")
+            v = st.text_input(f"Vigencia {key}", value=meta.get("vigencia", ""), key=f"vig_{key}")
+            r = st.text_area(f"Requisitos {key}", value=meta.get("requisitos", ""), key=f"req_{key}")
+            if st.button(f"Guardar {key}"):
+                PACKAGES[key]["vigencia"] = v
+                PACKAGES[key]["requisitos"] = r
+                persist_packages()
+                st.success(f"Paquete {key} actualizado")
+
+        st.markdown("Agregar nuevo paquete")
+        np_name = st.text_input("Nombre paquete nuevo", key="np_name")
+        np_vig = st.text_input("Vigencia", key="np_vig")
+        np_req = st.text_area("Requisitos", key="np_req")
+        if st.button("Agregar paquete nuevo"):
+            if np_name:
+                PACKAGES[np_name] = {"vigencia": np_vig, "requisitos": np_req}
+                persist_packages()
+                st.success("Paquete agregado")
+            else:
+                st.error("Nombre requerido")
+
+    if admin_section == "Estadísticas":
+        st.subheader("Estadísticas detalladas")
+        ventas = load_sales()
+        total_ventas = len(ventas)
+        total_ingresos = sum(float(v.get("total") or 0) for v in ventas)
+        st.write(f"Total ventas: {total_ventas}")
+        st.write(f"Ingresos totales: ${total_ingresos:,.2f}")
+        # Conversión simple: ventas / registros (no hay leads separados)
+        st.write("Conversión: no disponible (sin leads)")
+
+    if admin_section == "Comisiones":
+        st.subheader("Comisiones por asesor")
+        ventas = load_sales()
+        comps = {}
+        for v in ventas:
+            a = v.get("asesor") or "unknown"
+            comps.setdefault(a, 0)
+            try:
+                comps[a] += float(v.get("total") or 0)
+            except Exception:
+                pass
+        st.dataframe([{"asesor": k, "total_ingresos": v} for k, v in comps.items()])
+
+    if admin_section == "Seguimiento":
+        st.subheader("Seguimiento de clientes")
+        st.write("Agregar seguimiento")
+        f_cliente = st.text_input("Cliente", key="f_cliente")
+        f_asesor = st.text_input("Asesor asignado", key="f_asesor")
+        f_status = st.selectbox("Estado", ["interesado", "llamada pendiente", "venta cerrada", "no contestó"], key="f_status")
+        f_note = st.text_area("Nota", key="f_note")
+        if st.button("Agregar seguimiento"):
+            FOLLOWUPS.append({
+                "timestamp": datetime.now().isoformat(sep=" ", timespec="seconds"),
+                "cliente": f_cliente,
+                "asesor": f_asesor,
+                "status": f_status,
+                "nota": f_note,
+            })
+            persist_followups()
+            st.success("Seguimiento agregado")
+
+        if FOLLOWUPS:
+            st.dataframe(FOLLOWUPS)
+
+    if admin_section == "Configuración":
+        st.subheader("Configuración de la empresa")
+        porc = st.number_input("Porcentaje comisión por defecto", value=CONFIG.get("porcentaje_default", 0.06) * 100) / 100
+        if st.button("Guardar configuración"):
+            CONFIG["porcentaje_default"] = porc
+            CONFIG["horarios"] = CONFIG.get("horarios", horarios)
+            CONFIG["zonas"] = CONFIG.get("zonas", zonas)
+            persist_config()
+            st.success("Configuración guardada")
+
+    st.markdown("---")
 
 show_records = st.checkbox(
     "Ver registros de ventas",
