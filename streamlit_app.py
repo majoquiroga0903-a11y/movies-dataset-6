@@ -425,13 +425,6 @@ if "show_records" not in st.session_state:
 st.sidebar.header("Datos del cliente")
 
 st.sidebar.write(f"Asesor: {st.session_state['user_fullname']}")
-if st.sidebar.button("Cerrar sesión"):
-    st.session_state["authenticated"] = False
-    st.session_state["username"] = ""
-    st.session_state["user_fullname"] = ""
-    st.session_state["role"] = ""
-    st.session_state["message"] = ""
-    st.stop()
 
 cliente = st.sidebar.text_input("Nombre del cliente", key="cliente")
 
@@ -797,6 +790,27 @@ if st.session_state.get("role") == "admin":
             st.success("Configuración guardada")
 
     st.markdown("---")
+
+    # Logout al final de la barra lateral: estilo rojo para el último botón
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] .stButton > button:last-child{background-color:#d9534f;color:white;border:0;padding:6px 12px;border-radius:4px}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.sidebar.button("Cerrar sesión", key="cerrar_sesion"):
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = ""
+        st.session_state["user_fullname"] = ""
+        st.session_state["role"] = ""
+        st.session_state["message"] = ""
+        try:
+            st.experimental_rerun()
+        except Exception:
+            st.stop()
 
 show_records = st.checkbox(
     "Ver registros de ventas",
