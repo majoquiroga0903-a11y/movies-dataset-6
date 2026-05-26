@@ -2,61 +2,89 @@ import csv
 import os
 from datetime import datetime
 
+import pandas as pd
 import streamlit as st
-import json
 
-# -----------------------------------
+# =========================================================
 # CONFIGURACIÓN
-# -----------------------------------
+# =========================================================
 
 st.set_page_config(
-    page_title="Cerrador Pro",
+    page_title="Cerrador Pro Enterprise",
     page_icon="💼",
     layout="wide"
 )
 
-USERS = {
-    "juanpablo": {
-        "name": "Juan Pablo",
-        "role": "asesor",
-        "password": "asesor2026"
-    },
-    "mariajose": {
-        "name": "María José",
-        "role": "admin",
-        "password": "admin2026"
-    }
+# =========================================================
+# ESTILOS
+# =========================================================
+
+st.markdown("""
+<style>
+
+.main {
+    background-color: #f4f6f8;
 }
 
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-    st.session_state["username"] = ""
-    st.session_state["user_fullname"] = ""
-    st.session_state["role"] = ""
-    st.session_state["message"] = ""
+.box {
+    padding: 20px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+    background: white;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+}
 
-if not st.session_state["authenticated"]:
-    st.title("Iniciar sesión")
-    username_input = st.text_input("Usuario")
-    password_input = st.text_input("Contraseña", type="password")
+.aprobado {
+    border-left: 6px solid #2ecc71;
+    background: #eefaf1;
+    color: #145a32;
+}
 
-    if st.button("Ingresar"):
-        username_key = username_input.strip().lower()
-        user = USERS.get(username_key)
-        if user and password_input == user["password"]:
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = username_key
-            st.session_state["user_fullname"] = user["name"]
-            st.session_state["role"] = user["role"]
-            st.session_state["message"] = f"Bienvenido {user['name']}"
-        else:
-            st.error("Usuario o contraseña incorrectos.")
-    if not st.session_state["authenticated"]:
-        st.stop()
+.denegado {
+    border-left: 6px solid #e74c3c;
+    background: #fdecec;
+    color: #78281f;
+}
 
-# -----------------------------------
-# BASE DE DATOS
-# -----------------------------------
+.comision {
+    background: #fff8e1;
+    padding: 20px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #7d6608;
+}
+
+.destino {
+    background: #e8f8f5;
+    padding: 12px;
+    border-radius: 10px;
+    color: #117864;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.adminbox {
+    background: #ebf5fb;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# ARCHIVOS
+# =========================================================
+
+SALES_FILE = "ventas.csv"
+USERS_FILE = "usuarios.csv"
+CLIENTS_FILE = "clientes.csv"
+
+# =========================================================
+# ESTADOS
+# =========================================================
 
 zonas = {
     "Alabama": "Costa Este",
@@ -64,840 +92,629 @@ zonas = {
     "Arizona": "Costa Oeste",
     "Arkansas": "Zona Central",
     "California": "Costa Oeste",
-    "Colorado": "Zona Central",
+    "North Carolina": "Costa Este",
+    "South Carolina": "Costa Este",
+    "Colorado": "Costa Oeste",
     "Connecticut": "Costa Este",
+    "North Dakota": "Zona Central",
+    "South Dakota": "Zona Central",
     "Delaware": "Costa Este",
     "Florida": "Costa Este",
+    "Georgia": "Costa Este",
+    "Hawaii": "Costa Oeste",
+    "Idaho": "Costa Oeste",
+    "Illinois": "Zona Central",
+    "Indiana": "Zona Central",
+    "Iowa": "Zona Central",
+    "Kansas": "Zona Central",
+    "Kentucky": "Zona Central",
+    "Louisiana": "Zona Central",
+    "Maine": "Costa Este",
+    "Maryland": "Costa Este",
+    "Massachusetts": "Costa Este",
+    "Michigan": "Zona Central",
+    "Minnesota": "Zona Central",
+    "Mississippi": "Zona Central",
+    "Missouri": "Zona Central",
+    "Montana": "Costa Oeste",
+    "Nebraska": "Zona Central",
+    "Nevada": "Costa Oeste",
+    "New Jersey": "Costa Este",
+    "New York": "Costa Este",
+    "New Hampshire": "Costa Este",
+    "New Mexico": "Costa Oeste",
+    "Ohio": "Zona Central",
+    "Oklahoma": "Zona Central",
+    "Oregon": "Costa Oeste",
+    "Pennsylvania": "Costa Este",
+    "Rhode Island": "Costa Este",
+    "Tennessee": "Zona Central",
+    "Texas": "Zona Central",
+    "Utah": "Costa Oeste",
+    "Vermont": "Costa Este",
+    "Virginia": "Costa Este",
+    "West Virginia": "Costa Este",
+    "Washington": "Costa Oeste",
+    "Wisconsin": "Zona Central",
+    "Wyoming": "Costa Oeste"
 }
 
-# Archivo de ventas y campos
-SALES_FILE = "sales_records.csv"
-FIELDNAMES = [
-    "timestamp",
-    "cliente",
-    "estado",
-    "estado_civil",
-    "edad",
-    "residencia",
-    "zona",
-    "destino",
-    "hotel",
-    "paquete",
-    "vigencia",
-    "deducible",
-    "comision",
-    "ventas",
-    "ganancia_unitaria",
-    "total",
-    "cantidad_hijos",
-    "edades_hijos",
-    "beneficios",
-    "destinos_recomendados",
-    "cruceros_recomendados",
-    "asesor",
+horarios = {
+    "Costa Oeste": "6 AM - 2 PM",
+    "Zona Central": "7 AM - 4 PM",
+    "Costa Este": "9 AM - 5 PM",
+}
+
+# =========================================================
+# DESTINOS
+# =========================================================
+
+destinos_vdl = [
+    "Cancún",
+    "Punta Cana",
+    "Puerto Vallarta",
+    "Los Cabos",
+    "Bahamas",
+    "Costa Rica"
 ]
 
+destinos_mix = [
+    "Las Vegas",
+    "Phoenix",
+    "San Diego",
+    "Los Ángeles",
+    "Bahamas",
+    "México"
+]
 
-def ensure_sales_file():
-    if not os.path.exists(SALES_FILE):
-        with open(SALES_FILE, mode="w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-            writer.writeheader()
-
-
-# Persistencia simple para usuarios, hoteles, paquetes y seguimiento
-USERS_FILE = "users.json"
-HOTELES_FILE = "hoteles.json"
-PACKAGES_FILE = "packages.json"
-CONFIG_FILE = "config.json"
-FOLLOWUPS_FILE = "followups.json"
-
-
-def load_json(path, default):
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return default
-    else:
-        return default
-
-
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-# Hoteles de ejemplo por ciudad
 hoteles = {
-    "Cancún": ["Hotel Azul", "Resort Playa"],
-    "Punta Cana": ["Resort Caribe"],
-    "Puerto Vallarta": ["Hotel Pacifico"],
+    "Cancún": [
+        "Oasis Palm Lite",
+        "Villa del Palmar"
+    ],
+    "Punta Cana": [
+        "Ancora"
+    ],
+    "Las Vegas": [
+        "Tuscany Suites"
+    ],
+    "Orlando": [
+        "Avanti",
+        "Buena Vista Suites"
+    ]
 }
 
-# Horarios por zona
-horarios = {
-    "Costa Este": "9:00 - 18:00",
-    "Costa Oeste": "8:00 - 17:00",
-    "Zona Central": "8:30 - 17:30",
+cruceros = {
+    "Miami": "Key West + Cozumel",
+    "Port Canaveral": "Bahamas + Nassau",
+    "Long Beach": "Ensenada + Islas Catalina",
+    "New Orleans": "Cozumel + Progreso"
+}
+
+# =========================================================
+# CREAR ARCHIVOS
+# =========================================================
+
+def crear_archivo(file, columnas):
+    if not os.path.exists(file):
+        with open(file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(columnas)
+
+crear_archivo(
+    SALES_FILE,
+    [
+        "Fecha",
+        "Cliente",
+        "Asesor",
+        "Paquete",
+        "Estado",
+        "Edad",
+        "Estado Civil",
+        "Residencia",
+        "Hijos",
+        "Comisión"
+    ]
+)
+
+crear_archivo(
+    USERS_FILE,
+    [
+        "Usuario",
+        "Password",
+        "Rol"
+    ]
+)
+
+crear_archivo(
+    CLIENTS_FILE,
+    [
+        "Cliente",
+        "Teléfono",
+        "Seguimiento"
+    ]
+)
+
+# =========================================================
+# LOGIN
+# =========================================================
+
+DEFAULT_USERS = {
+    "juanpablo": {"password": "asesor2026", "rol": "asesor", "name": "Juan Pablo"},
+    "mariajose": {"password": "admin2026", "rol": "admin", "name": "María José"},
+    "admin": {"password": "admin123", "rol": "admin", "name": "Administrador"},
+    "asesor": {"password": "1234", "rol": "asesor", "name": "Asesor"},
 }
 
 
-# Cargar o inicializar datos persistentes
-USERS = load_json(USERS_FILE, USERS)
-hoteles = load_json(HOTELES_FILE, hoteles)
-PACKAGES = load_json(PACKAGES_FILE, {
-    "VDL": {
-        "vigencia": "12 meses reservar / 18 vacacionar",
-        "requisitos": "Residente, Casado/Convive, edades permitidas",
-    },
-    "HÍBRIDO": {
-        "vigencia": "12 meses reservar / 18 vacacionar",
-        "requisitos": "Mujer soltera o divorciado, rango de edad",
-    },
-    "MIX & MATCH": {
-        "vigencia": "12 meses para reservar / 18 vacacionar",
-        "requisitos": "Edad >=18, hijos hasta 17",
-    }
-})
+def cargar_usuarios():
+    usuarios = DEFAULT_USERS.copy()
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, mode="r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get("Usuario"):
+                    key = row["Usuario"].strip().lower()
+                    usuarios[key] = {
+                        "password": row.get("Password", ""),
+                        "rol": row.get("Rol", "asesor"),
+                        "name": row.get("Usuario", row.get("Usuario", key))
+                    }
+    return usuarios
 
-CONFIG = load_json(CONFIG_FILE, {
-    "horarios": horarios,
-    "zonas": zonas,
-    "porcentaje_default": 0.06,
-})
+USERS = cargar_usuarios()
 
-FOLLOWUPS = load_json(FOLLOWUPS_FILE, [])
+if "login" not in st.session_state:
+    st.session_state.login = False
+    st.session_state.usuario = ""
+    st.session_state.rol = ""
+    st.session_state.name = ""
 
+st.sidebar.title("🔐 Login")
 
-def persist_users():
-    global USERS
-    save_json(USERS_FILE, USERS)
-    # recargar
-    USERS = load_json(USERS_FILE, {})
+usuario = st.sidebar.text_input("Usuario", key="login_usuario")
+password = st.sidebar.text_input("Contraseña", type="password", key="login_password")
 
+if st.sidebar.button("Ingresar", key="login_button"):
+    usuario_key = usuario.strip().lower()
+    usuario_info = USERS.get(usuario_key)
+    if usuario_info and password == usuario_info["password"]:
+        st.session_state.login = True
+        st.session_state.usuario = usuario_key
+        st.session_state.name = usuario_info.get("name", usuario_key)
+        st.session_state.rol = usuario_info.get("rol", "asesor")
+    else:
+        st.sidebar.error("Usuario incorrecto")
 
-def persist_hoteles():
-    global hoteles
-    save_json(HOTELES_FILE, hoteles)
-    hoteles = load_json(HOTELES_FILE, {})
+if not st.session_state.login:
+    st.warning("Inicia sesión")
+    st.stop()
 
+# =========================================================
+# SIDEBAR
+# =========================================================
 
-def persist_packages():
-    global PACKAGES
-    save_json(PACKAGES_FILE, PACKAGES)
-    PACKAGES = load_json(PACKAGES_FILE, {})
+menu = st.sidebar.radio(
+    "Panel",
+    [
+        "📊 Dashboard",
+        "💰 Ventas",
+        "📞 Clientes",
+        "🏨 Hoteles",
+        "📦 Paquetes",
+        "📈 Estadísticas",
+        "💵 Comisiones",
+        "⚙️ Configuración"
+    ],
+    key="menu_panel"
+)
 
+admin_menu = None
+if st.session_state.rol == "admin":
+    admin_menu = st.sidebar.radio(
+        "Admin",
+        [
+            "👥 Usuarios",
+            "📜 Historial"
+        ],
+        key="admin_panel"
+    )
 
-def persist_config():
-    global CONFIG, zonas, horarios
-    save_json(CONFIG_FILE, CONFIG)
-    CONFIG = load_json(CONFIG_FILE, {})
-    zonas = CONFIG.get("zonas", zonas)
-    horarios = CONFIG.get("horarios", horarios)
-
-
-def persist_followups():
-    global FOLLOWUPS
-    save_json(FOLLOWUPS_FILE, FOLLOWUPS)
-    FOLLOWUPS = load_json(FOLLOWUPS_FILE, {})
-
-
-def load_sales():
-    ensure_sales_file()
-    with open(SALES_FILE, mode="r", newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        return list(reader)
-
-
-def save_sale(record):
-    ensure_sales_file()
-    with open(SALES_FILE, mode="a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        writer.writerow(record)
-
+# =========================================================
+# VENTAS
+# =========================================================
 
 def hijos_validos_vdl(edades):
-    for edad_hijo in edades:
-        if edad_hijo > 11:
-            return False
-    return True
+    return all(edad_hijo <= 11 for edad_hijo in edades)
 
 
 def hijos_validos_mix(edades):
-    for edad_hijo in edades:
-        if edad_hijo > 17:
-            return False
-    return True
+    return all(edad_hijo <= 17 for edad_hijo in edades)
 
+# =========================================================
+# DASHBOARD
+# =========================================================
 
+if menu == "📊 Dashboard":
+    st.title("💼 Cerrador Pro Enterprise")
 
-def compute_package(
-    estado_civil,
-    edad,
-    residencia,
-    cantidad_hijos,
-    edades_hijos
-):
-    # Valores por defecto
-    califica = False
+    if os.path.exists(SALES_FILE):
+        ventas_df = pd.read_csv(SALES_FILE)
+    else:
+        ventas_df = pd.DataFrame()
+
+    total_ventas = len(ventas_df)
+    total_comisiones = 0
+    if not ventas_df.empty and "Comisión" in ventas_df.columns:
+        total_comisiones = ventas_df["Comisión"].astype(float).sum()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Ventas", total_ventas)
+    col2.metric("Usuario", st.session_state.name)
+    col3.metric("Rol", st.session_state.rol)
+    st.markdown("---")
+    st.write("Registro de ventas guardado en `ventas.csv` y clientes en `clientes.csv`.")
+    st.metric("Comisión acumulada", f"${total_comisiones:,.2f}")
+
+# =========================================================
+# VENTAS
+# =========================================================
+
+if menu == "💰 Ventas":
+    st.title("💰 Nueva Venta")
+
+    cliente = st.text_input("Cliente", key="venta_cliente")
+
+    estado = st.selectbox(
+        "Estado",
+        sorted(zonas.keys()),
+        key="venta_estado"
+    )
+
+    estado_civil = st.selectbox(
+        "Estado civil",
+        [
+            "Casado / Convive",
+            "Mujer Soltera",
+            "Hombre Soltero"
+        ],
+        key="venta_estado_civil"
+    )
+
+    edad = st.number_input(
+        "Edad",
+        18,
+        100,
+        30,
+        key="venta_edad"
+    )
+
+    residencia = st.selectbox(
+        "Residente o ciudadano",
+        [
+            "Sí",
+            "No"
+        ],
+        key="venta_residencia"
+    )
+
+    cantidad_hijos = st.number_input(
+        "Cantidad hijos",
+        0,
+        10,
+        0,
+        key="venta_cantidad_hijos"
+    )
+
+    edades_hijos = []
+    if cantidad_hijos > 0:
+        st.subheader("Edades hijos")
+        for i in range(cantidad_hijos):
+            edad_hijo = st.number_input(
+                f"Edad hijo {i+1}",
+                0,
+                25,
+                key=f"venta_hijo_{i}"
+            )
+            edades_hijos.append(edad_hijo)
+
     paquete = "MIX & MATCH"
     vigencia = "24 meses"
-    motivo = "No cumple los requisitos"
     beneficios = []
-    destinos_recomendados = []
-    cruceros_recomendados = []
+    destinos = []
+    califica = False
 
-    # Helpers locales
-    residencia_flag = (residencia == "Sí")
-
-    # Reglas para residentes
-    if residencia_flag:
+    if residencia == "Sí":
         if estado_civil == "Casado / Convive":
-            # Rango de edad permitido para VDL y validación de hijos
-            if 25 <= edad <= 79 and hijos_validos_vdl(edades_hijos):
-                califica = True
-                paquete = "VDL"
-                vigencia = "12 meses reservar / 18 vacacionar"
-                beneficios = [
-                    "All inclusive",
-                    "3 comidas incluidas",
-                    "Bebidas alcohólicas y no alcohólicas",
-                    "Transporte aeropuerto-hotel",
-                    "90 min Time Share sin compromiso"
-                ]
-                destinos_recomendados = [
-                    "Cancún",
-                    "Punta Cana",
-                    "Puerto Vallarta",
-                    "Los Cabos",
-                    "Bahamas",
-                    "Costa Rica"
-                ]
-                cruceros_recomendados = [
-                    "Crucero Caribe 5N/4D",
-                    "Crucero Riviera Maya 7N/6D"
-                ]
-
-        if estado_civil == "Mujer Soltera":
-            if 25 <= edad <= 72:
-                califica = True
+            if 30 <= edad <= 70:
+                if hijos_validos_vdl(edades_hijos):
+                    paquete = "VDL"
+                    vigencia = "12 meses reservar / 18 vacacionar"
+                    beneficios = [
+                        "All inclusive",
+                        "3 comidas",
+                        "Bebidas alcohólicas",
+                        "Transporte aeropuerto-hotel",
+                        "90 mins Time Share"
+                    ]
+                    destinos = destinos_vdl
+                    califica = True
+        elif estado_civil == "Mujer Soltera":
+            if 25 <= edad <= 70:
                 paquete = "HÍBRIDO"
-                vigencia = "12 meses reservar / 18 vacacionar"
                 beneficios = [
                     "1 destino VDL",
-                    "2 destinos Mix & Match",
-                    "Time Share 90 minutos"
+                    "2 Mix & Match",
+                    "90 mins Time Share"
                 ]
-                destinos_recomendados = [
+                destinos = [
                     "Cancún",
-                    "Vegas",
+                    "Las Vegas",
                     "Orlando"
                 ]
-                cruceros_recomendados = [
-                    "Crucero Bahamas 5N/4D",
-                    "Crucero Panamá 8N/7D"
-                ]
-
-        if estado_civil == "Hombre Soltero":
-            if 35 <= edad <= 59:
                 califica = True
+        elif estado_civil == "Hombre Soltero":
+            if 35 <= edad <= 59:
                 paquete = "VDL"
-                vigencia = "12 meses reservar / 18 vacacionar"
                 beneficios = [
                     "All inclusive",
                     "Hospedaje premium",
                     "Transporte incluido"
                 ]
-                destinos_recomendados = [
+                destinos = [
                     "Puerto Vallarta",
                     "Los Cabos",
                     "Lake Havasu"
                 ]
-                cruceros_recomendados = [
-                    "Crucero Caribe 5N/4D",
-                    "Crucero Bahía Mar 6N/5D"
-                ]
-
-        if estado_civil == "Divorciado":
-            if 25 <= edad <= 72:
                 califica = True
-                paquete = "HÍBRIDO"
-                vigencia = "12 meses reservar / 18 vacacionar"
-                beneficios = [
-                    "1 destino VDL",
-                    "2 destinos Mix & Match",
-                    "Time Share 90 minutos"
-                ]
-                destinos_recomendados = [
-                    "Cancún",
-                    "Vegas",
-                    "Orlando"
-                ]
-                cruceros_recomendados = [
-                    "Crucero Bahamas 5N/4D"
-                ]
 
-    # Si no calificó para paquetes preferenciales o no es residente
     if not califica:
-        # Reglas generales para MIX & MATCH: edad mínima y validación de hijos
-        if edad >= 18 and hijos_validos_mix(edades_hijos):
-            paquete = "MIX & MATCH"
-            vigencia = "12 meses para reservar / 18 vacacionar"
-            beneficios = [
-                "Sin Time Share",
-                "Open 4/3",
-                "Crucero 5/4",
-                "12 meses para reservar",
-                "2 destinos"
-            ]
-            destinos_recomendados = [
-                "Bahamas",
-                "México",
-                "Las Vegas",
-                "Phoenix",
-                "Los Ángeles",
-                "San Diego"
-            ]
-            cruceros_recomendados = [
-                "Crucero Bahamas 5N/4D",
-                "Crucero Miami 4N/3D"
-            ]
+        if edad >= 18:
+            if hijos_validos_mix(edades_hijos):
+                paquete = "MIX & MATCH"
+                beneficios = [
+                    "Sin Time Share",
+                    "Open 4/3",
+                    "Crucero 5/4",
+                    "12 meses para reservar"
+                ]
+                destinos = destinos_mix
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Resultado")
+        if paquete == "VDL":
+            st.markdown(f"""
+            <div class="box aprobado">
+            ✅ CALIFICA PARA VDL
+
+            <br><br>
+            Vigencia:
+            {vigencia}
+            </div>
+            """, unsafe_allow_html=True)
+        elif paquete == "HÍBRIDO":
+            st.markdown(f"""
+            <div class="box aprobado">
+            ✅ CALIFICA PARA HÍBRIDO
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            motivo = "No cumple los requisitos de edad o hijos para ningún paquete"
-    # Si el admin definió valores para paquetes en PACKAGES, aplicarlos (vigencia, beneficios, destinos)
-    pkg_meta = PACKAGES.get(paquete, {}) if isinstance(PACKAGES, dict) else {}
-    if pkg_meta:
-        vigencia = pkg_meta.get("vigencia", vigencia)
-        if "beneficios" in pkg_meta:
-            beneficios = pkg_meta.get("beneficios") or beneficios
-        if "destinos" in pkg_meta:
-            destinos_recomendados = pkg_meta.get("destinos") or destinos_recomendados
-        if "cruceros" in pkg_meta:
-            cruceros_recomendados = pkg_meta.get("cruceros") or cruceros_recomendados
+            st.markdown(f"""
+            <div class="box denegado">
+            ⚠️ ENVIAR A MIX & MATCH
+            </div>
+            """, unsafe_allow_html=True)
 
-    return (
-        califica,
-        paquete,
-        vigencia,
-        motivo,
-        beneficios,
-        destinos_recomendados,
-        cruceros_recomendados
-    )
+        st.subheader("Beneficios")
+        for beneficio in beneficios:
+            st.write("✅", beneficio)
 
+        st.subheader("Destinos recomendados")
+        for destino in destinos:
+            st.write("🌴", destino)
 
-def parse_edades_hijos(edades_str):
-    if edades_str is None:
-        return []
+        st.subheader("Cruceros disponibles")
+        for salida, ruta in cruceros.items():
+            st.write(f"🚢 {salida} → {ruta}")
 
-    edades_str = edades_str.strip()
-    if edades_str == "":
-        return []
+    with col2:
+        zona = zonas[estado]
+        st.subheader("Zona")
+        st.info(f"Zona: {zona}\n\nHorario: {horarios[zona]}")
 
-    edades = []
-    for part in edades_str.split(","):
-        part = part.strip()
-        if part == "":
-            continue
-
-        try:
-            edad = int(part)
-        except ValueError:
-            return None
-
-        if edad < 0 or edad > 25:
-            return None
-
-        edades.append(edad)
-
-    return edades
-
-
-def reset_form():
-    st.session_state["cliente"] = ""
-    st.session_state["estado"] = "Alabama"
-    st.session_state["estado_civil"] = "Casado / Convive"
-    st.session_state["edad"] = 35
-    st.session_state["residencia"] = "Sí"
-    st.session_state["porcentaje"] = 6
-    st.session_state["ventas"] = 1
-    st.session_state["deducible"] = 399
-    st.session_state["cantidad_hijos"] = 0
-    st.session_state["edades_hijos_str"] = ""
-    st.session_state["message"] = ""
-    st.session_state["sale_registered"] = False
-    st.session_state["show_records"] = False
-
-if "cliente" not in st.session_state:
-    reset_form()
-
-if "message" not in st.session_state:
-    st.session_state["message"] = ""
-
-if "sale_registered" not in st.session_state:
-    st.session_state["sale_registered"] = False
-
-if "show_records" not in st.session_state:
-    st.session_state["show_records"] = False
-
-# -----------------------------------
-# SIDEBAR
-# -----------------------------------
-
-st.sidebar.header("Datos del cliente")
-
-st.sidebar.write(f"Asesor: {st.session_state['user_fullname']}")
-
-cliente = st.sidebar.text_input("Nombre del cliente", key="cliente")
-
-estado = st.sidebar.selectbox(
-    "Estado",
-    sorted(list(zonas.keys())),
-    key="estado"
-)
-
-estado_civil = st.sidebar.selectbox(
-    "Estado civil",
-    [
-        "Casado / Convive",
-        "Mujer Soltera",
-        "Hombre Soltero",
-        "Divorciado"
-    ],
-    key="estado_civil"
-)
-
-edad = st.sidebar.number_input(
-    "Edad",
-    18,
-    100,
-    key="edad"
-)
-
-residencia = st.sidebar.selectbox(
-    "Residente USA/Canadá?",
-    ["Sí", "No"],
-    key="residencia"
-)
-
-deducible = st.sidebar.number_input(
-    "Monto deducible",
-    150,
-    500,
-    399,
-    key="deducible"
-)
-
-st.sidebar.markdown("---")
-
-st.sidebar.markdown("Vista principal con todos los hoteles disponibles por ciudad.")
-
-porcentaje = st.sidebar.radio(
-    "Comisión (%)",
-    [6, 8],
-    index=0,
-    key="porcentaje"
-) / 100
-
-ventas = 1
-st.sidebar.markdown("Solo se puede vender 1 paquete por registro.")
-
-st.sidebar.markdown("---")
-
-cantidad_hijos = st.sidebar.number_input(
-    "Cantidad de hijos",
-    0,
-    10,
-    0,
-    key="cantidad_hijos"
-)
-
-edades_hijos = []
-valid_edades_hijos = True
-if cantidad_hijos > 0:
-    st.sidebar.markdown("### Edades de los hijos")
-    for i in range(cantidad_hijos):
-        edad_hijo = st.sidebar.number_input(
-            f"Edad hijo {i+1}",
-            0,
-            25,
-            key=f"hijo_{i}"
+        deducible = st.number_input(
+            "Deducible",
+            200,
+            500,
+            399,
+            key="venta_deducible"
         )
-        edades_hijos.append(edad_hijo)
 
-st.sidebar.markdown("---")
-st.sidebar.button("Limpiar formulario", on_click=reset_form)
-
-register_click = st.sidebar.button("Registrar venta")
-
-# -----------------------------------
-# LÓGICA
-# -----------------------------------
-
-zona = zonas[estado]
-califica, paquete, vigencia, motivo, beneficios, destinos_recomendados, cruceros_recomendados = compute_package(
-    estado_civil,
-    edad,
-    residencia,
-    cantidad_hijos,
-    edades_hijos
-)
-
-
-deducible = st.session_state["deducible"]
-
-ganancia = deducible * porcentaje
-
-total = ganancia * ventas
-
-if register_click:
-    if not valid_edades_hijos:
-        st.session_state["message"] = (
-            "Corrija las edades de los hijos antes de registrar la venta. "
-            "Asegúrese de que el número de edades coincida con la cantidad de hijos."
+        porcentaje = st.selectbox(
+            "Porcentaje comisión",
+            [6, 8],
+            key="venta_porcentaje"
         )
-    else:
-        record = {
-            "timestamp": datetime.now().isoformat(sep=" ", timespec="seconds"),
-            "cliente": cliente,
-            "estado": estado,
-            "estado_civil": estado_civil,
-            "edad": edad,
-            "residencia": residencia,
-            "zona": zona,
-            "destino": "No aplica",
-            "hotel": "No aplica",
-            "paquete": paquete,
-            "vigencia": vigencia,
-            "deducible": deducible,
-            "comision": porcentaje,
-            "ventas": ventas,
-            "ganancia_unitaria": ganancia,
-            "total": total,
-            "cantidad_hijos": cantidad_hijos,
-            "edades_hijos": ", ".join(str(x) for x in edades_hijos),
-            "beneficios": ", ".join(beneficios),
-            "destinos_recomendados": ", ".join(destinos_recomendados),
-            "cruceros_recomendados": ", ".join(cruceros_recomendados),
-            "asesor": st.session_state["username"]
-        }
-        save_sale(record)
-        st.session_state["message"] = "Venta registrada correctamente. Puede iniciar una nueva operación con Limpiar formulario."
-        st.session_state["sale_registered"] = True
 
-# -----------------------------------
-# INTERFAZ
-# -----------------------------------
+        comision = deducible * (porcentaje / 100)
 
-st_title_str = "Deal"
-st.title(st_title_str)
-st.write("Sistema de calificación y registro de ventas para paquetes vacacionales.")
+        st.markdown(f"""
+        <div class="comision">
+        Comisión:
+        ${comision:,.2f}
+        </div>
+        """, unsafe_allow_html=True)
 
-# --- Panel admin (solo visible para role == 'admin')
-if st.session_state.get("role") == "admin":
-    st.sidebar.markdown("## Panel Admin")
-    admin_buttons = [
-        "Dashboard",
-        "Ventas",
-        "Usuarios",
-        "Clientes (Historial)",
-        "Hoteles",
-        "Paquetes",
-        "Comisiones",
-        "Estadísticas",
+        if st.button("Registrar Venta", key="btn_registrar_venta"):
+            with open(SALES_FILE, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    datetime.now().isoformat(sep=" ", timespec="seconds"),
+                    cliente,
+                    st.session_state.name,
+                    paquete,
+                    estado,
+                    edad,
+                    estado_civil,
+                    residencia,
+                    cantidad_hijos,
+                    comision
+                ])
+            st.success("Venta registrada correctamente")
+
+# =========================================================
+# CLIENTES
+# =========================================================
+
+if menu == "📞 Clientes":
+    st.title("📞 Seguimiento Clientes")
+
+    cliente = st.text_input("Cliente", key="cliente_nombre")
+    telefono = st.text_input("Teléfono", key="cliente_telefono")
+    seguimiento = st.selectbox(
         "Seguimiento",
-        "Configuración",
-    ]
-
-    # Inicializar sección admin en session_state
-    if "admin_section" not in st.session_state:
-        st.session_state["admin_section"] = "Dashboard"
-
-    for name in admin_buttons:
-        if st.sidebar.button(name):
-            st.session_state["admin_section"] = name
-
-    st.sidebar.markdown("---")
-
-    admin_section = st.session_state.get("admin_section", "Dashboard")
-
-    if admin_section == "Dashboard":
-        st.subheader("Dashboard rápido")
-        ventas = load_sales()
-        total_ventas = len(ventas)
-        total_ingresos = sum(float(v.get("total") or 0) for v in ventas)
-        hoy = datetime.now().date().isoformat()
-        ventas_hoy = sum(1 for v in ventas if v.get("timestamp", "")[:10] == hoy)
-
-        # Mejor asesor del mes
-        from collections import Counter
-        now = datetime.now()
-        ym = f"{now.year}-{now.month:02d}"
-        ventas_mes = [v for v in ventas if v.get("timestamp", "")[:7] == ym]
-        mejor_asesor = None
-        if ventas_mes:
-            asesores_mes = [v.get("asesor") for v in ventas_mes if v.get("asesor")]
-            if asesores_mes:
-                mejor_asesor = Counter(asesores_mes).most_common(1)[0][0]
-        porcentaje_conversion = None
-        if total_ventas > 0:
-            porcentaje_conversion = f"{(len(ventas_mes)/total_ventas*100):.1f}%"
-
-        st.metric("Total ventas", total_ventas)
-        st.metric("Ingresos totales (USD)", f"${total_ingresos:,.2f}")
-        st.metric("Ventas hoy", ventas_hoy)
-        st.write(f"Mejor asesor del mes: {mejor_asesor or 'N/A'}")
-        st.write(f"Porcentaje de ventas este mes vs totales: {porcentaje_conversion or 'N/A'}")
-
-    if admin_section == "Usuarios":
-        st.subheader("Gestión de usuarios")
-        users_list = [{"username": k, **v} for k, v in USERS.items()]
-        st.dataframe(users_list)
-
-        st.markdown("**Crear asesor**")
-        new_user = st.text_input("Usuario (username)", key="new_user")
-        new_name = st.text_input("Nombre completo", key="new_name")
-        new_pass = st.text_input("Contraseña", type="password", key="new_pass")
-        if st.button("Crear asesor"):
-            if not new_user or not new_pass:
-                st.error("Usuario y contraseña obligatorios")
-            else:
-                USERS[new_user] = {"name": new_name or new_user, "role": "asesor", "password": new_pass}
-                persist_users()
-                st.success("Asesor creado")
-
-        st.markdown("**Modificar / eliminar usuario**")
-        sel_user = st.selectbox("Seleccionar usuario", sorted(list(USERS.keys())), key="sel_user")
-        if sel_user:
-            info = USERS.get(sel_user, {})
-            st.write(info)
-            if st.button("Borrar usuario"):
-                if sel_user == st.session_state.get("username"):
-                    st.error("No puede borrarse a sí mismo")
-                else:
-                    USERS.pop(sel_user, None)
-                    persist_users()
-                    st.success("Usuario eliminado")
-
-            new_pw = st.text_input("Nueva contraseña", type="password", key="chg_pw")
-            if st.button("Cambiar contraseña"):
-                if new_pw:
-                    USERS[sel_user]["password"] = new_pw
-                    persist_users()
-                    st.success("Contraseña actualizada")
-                else:
-                    st.error("Ingrese una contraseña válida")
-
-            bloquear = st.checkbox("Bloquear cuenta", value=USERS.get(sel_user, {}).get("blocked", False), key="block")
-            if st.button("Aplicar bloqueo"):
-                USERS[sel_user]["blocked"] = bloquear
-                persist_users()
-                st.success("Estado de bloqueo actualizado")
-
-    if admin_section == "Clientes (Historial)":
-        st.subheader("Historial completo de clientes")
-        ventas_guardadas = load_sales()
-        st.dataframe(ventas_guardadas)
-
-    if admin_section == "Hoteles":
-        st.subheader("Hoteles y destinos")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("Hoteles por ciudad")
-            for ciudad, lista in hoteles.items():
-                st.write(f"- {ciudad}: {', '.join(lista)}")
-        with col2:
-            ciudad = st.text_input("Ciudad a agregar")
-            hotel = st.text_input("Hotel / Resort a agregar")
-            if st.button("Agregar hotel"):
-                if ciudad and hotel:
-                    hoteles.setdefault(ciudad, [])
-                    hoteles[ciudad].append(hotel)
-                    persist_hoteles()
-                    st.success("Hotel agregado")
-                else:
-                    st.error("Ciudad y hotel requeridos")
-
-            ciudad_del = st.selectbox("Ciudad para eliminar hotel", sorted(list(hoteles.keys())), key="ciudad_del")
-            hotel_del = st.selectbox("Hotel", hoteles.get(ciudad_del, []), key="hotel_del")
-            if st.button("Eliminar hotel seleccionado"):
-                if hotel_del in hoteles.get(ciudad_del, []):
-                    hoteles[ciudad_del].remove(hotel_del)
-                    persist_hoteles()
-                    st.success("Hotel eliminado")
-
-    if admin_section == "Paquetes":
-        st.subheader("Editar paquetes")
-        for key, meta in PACKAGES.items():
-            st.markdown(f"**{key}**")
-            v = st.text_input(f"Vigencia {key}", value=meta.get("vigencia", ""), key=f"vig_{key}")
-            r = st.text_area(f"Requisitos {key}", value=meta.get("requisitos", ""), key=f"req_{key}")
-            if st.button(f"Guardar {key}"):
-                PACKAGES[key]["vigencia"] = v
-                PACKAGES[key]["requisitos"] = r
-                persist_packages()
-                st.success(f"Paquete {key} actualizado")
-
-        st.markdown("Agregar nuevo paquete")
-        np_name = st.text_input("Nombre paquete nuevo", key="np_name")
-        np_vig = st.text_input("Vigencia", key="np_vig")
-        np_req = st.text_area("Requisitos", key="np_req")
-        if st.button("Agregar paquete nuevo"):
-            if np_name:
-                PACKAGES[np_name] = {"vigencia": np_vig, "requisitos": np_req}
-                persist_packages()
-                st.success("Paquete agregado")
-            else:
-                st.error("Nombre requerido")
-
-    if admin_section == "Estadísticas":
-        st.subheader("Estadísticas detalladas")
-        ventas = load_sales()
-        total_ventas = len(ventas)
-        total_ingresos = sum(float(v.get("total") or 0) for v in ventas)
-        st.write(f"Total ventas: {total_ventas}")
-        st.write(f"Ingresos totales: ${total_ingresos:,.2f}")
-        # Conversión simple: ventas / registros (no hay leads separados)
-        st.write("Conversión: no disponible (sin leads)")
-
-    if admin_section == "Comisiones":
-        st.subheader("Comisiones por asesor")
-        ventas = load_sales()
-        comps = {}
-        for v in ventas:
-            a = v.get("asesor") or "unknown"
-            comps.setdefault(a, 0)
-            try:
-                comps[a] += float(v.get("total") or 0)
-            except Exception:
-                pass
-        st.dataframe([{"asesor": k, "total_ingresos": v} for k, v in comps.items()])
-
-    if admin_section == "Seguimiento":
-        st.subheader("Seguimiento de clientes")
-        st.write("Agregar seguimiento")
-        f_cliente = st.text_input("Cliente", key="f_cliente")
-        f_asesor = st.text_input("Asesor asignado", key="f_asesor")
-        f_status = st.selectbox("Estado", ["interesado", "llamada pendiente", "venta cerrada", "no contestó"], key="f_status")
-        f_note = st.text_area("Nota", key="f_note")
-        if st.button("Agregar seguimiento"):
-            FOLLOWUPS.append({
-                "timestamp": datetime.now().isoformat(sep=" ", timespec="seconds"),
-                "cliente": f_cliente,
-                "asesor": f_asesor,
-                "status": f_status,
-                "nota": f_note,
-            })
-            persist_followups()
-            st.success("Seguimiento agregado")
-
-        if FOLLOWUPS:
-            st.dataframe(FOLLOWUPS)
-
-    if admin_section == "Configuración":
-        st.subheader("Configuración de la empresa")
-        porc = st.number_input("Porcentaje comisión por defecto", value=CONFIG.get("porcentaje_default", 0.06) * 100) / 100
-        if st.button("Guardar configuración"):
-            CONFIG["porcentaje_default"] = porc
-            CONFIG["horarios"] = CONFIG.get("horarios", horarios)
-            CONFIG["zonas"] = CONFIG.get("zonas", zonas)
-            persist_config()
-            st.success("Configuración guardada")
-
-    st.markdown("---")
-
-    # Logout al final de la barra lateral: estilo rojo para el último botón
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        """
-        <style>
-        [data-testid="stSidebar"] .stButton > button:last-child{background-color:#d9534f;color:white;border:0;padding:6px 12px;border-radius:4px}
-        </style>
-        """,
-        unsafe_allow_html=True,
+        [
+            "Interesado",
+            "Llamada pendiente",
+            "Venta cerrada",
+            "No contestó"
+        ],
+        key="cliente_seguimiento"
     )
-    if st.sidebar.button("Cerrar sesión", key="cerrar_sesion"):
-        st.session_state["authenticated"] = False
-        st.session_state["username"] = ""
-        st.session_state["user_fullname"] = ""
-        st.session_state["role"] = ""
-        st.session_state["message"] = ""
-        try:
-            st.experimental_rerun()
-        except Exception:
-            st.stop()
 
-show_records = st.checkbox(
-    "Ver registros de ventas",
-    value=st.session_state.get("show_records", False),
-    key="show_records"
-)
+    if st.button("Guardar Cliente", key="btn_guardar_cliente"):
+        with open(CLIENTS_FILE, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                cliente,
+                telefono,
+                seguimiento
+            ])
+        st.success("Cliente guardado")
 
-if show_records:
-    ventas_guardadas = load_sales()
-    if st.session_state["role"] == "asesor":
-        ventas_guardadas = [v for v in ventas_guardadas if v.get("asesor") == st.session_state["username"]]
+    if os.path.exists(CLIENTS_FILE):
+        df = pd.read_csv(CLIENTS_FILE)
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No hay clientes guardados aún.")
 
-    if ventas_guardadas:
-        st.subheader("Registros de ventas")
-        st.dataframe(ventas_guardadas, use_container_width=True)
+# =========================================================
+# HOTELES
+# =========================================================
+
+if menu == "🏨 Hoteles":
+    st.title("🏨 Hoteles y Resorts")
+    for ciudad, lista in hoteles.items():
+        st.markdown(f"""
+        <div class="destino">
+        {ciudad}
+        </div>
+        """, unsafe_allow_html=True)
+        for hotel in lista:
+            st.write("🏨", hotel)
+
+# =========================================================
+# PAQUETES
+# =========================================================
+
+if menu == "📦 Paquetes":
+    st.title("📦 Paquetes")
+    st.subheader("VDL")
+    st.write("""
+    • 3 destinos
+    • All inclusive
+    • Transporte aeropuerto-hotel
+    • 90 mins Time Share
+    • Bebidas incluidas
+    """)
+    st.subheader("HÍBRIDO")
+    st.write("""
+    • 1 destino VDL
+    • 2 destinos Mix & Match
+    • Time Share
+    """)
+    st.subheader("MIX & MATCH")
+    st.write("""
+    • Open 4/3
+    • Crucero 5/4
+    • 2 destinos
+    • 12 meses reservar
+    """)
+
+# =========================================================
+# ESTADÍSTICAS
+# =========================================================
+
+if menu == "📈 Estadísticas":
+    st.title("📈 Estadísticas")
+    if os.path.exists(SALES_FILE):
+        df = pd.read_csv(SALES_FILE)
+        st.dataframe(df, use_container_width=True)
+        st.metric("Ventas Totales", len(df))
     else:
         st.info("No hay ventas registradas aún.")
 
-# Mostrar bloque de ventas/resultado solo si no estamos en una sección admin distinta de 'Ventas'
-show_sales = True
-if st.session_state.get("role") == "admin":
-    if st.session_state.get("admin_section") and st.session_state.get("admin_section") != "Ventas":
-        show_sales = False
+# =========================================================
+# COMISIONES
+# =========================================================
 
-if show_sales:
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.subheader("Ventas")
-
-        st.markdown(f"**Cliente:** {cliente or ''}")
-        st.markdown(f"**Paquete ideal:** {paquete}")
-        st.markdown(f"**Vigencia:** {vigencia}")
-        st.markdown(f"**Deducible:** ${deducible}")
-
-        st.markdown("---")
-        st.markdown("**Zona y horario**")
-        st.markdown(f"Zona detectada: {zona}")
-        st.markdown(f"Horario: {horarios.get(zona, 'N/A')}")
-
-        st.markdown("---")
-        st.markdown("**Destinos y hoteles disponibles**")
-        for ciudad, lista_hoteles in hoteles.items():
-            st.markdown(f"- {ciudad}")
-            for hotel_item in lista_hoteles:
-                st.write(f"  - {hotel_item}")
-
-        st.markdown("---")
-        st.subheader("Speech")
-        if califica:
-            st.write(
-                "El cliente califica para un paquete especial. Puede comunicarle que el viaje ya está aprobado y que solo necesita cubrir el deducible para comenzar a reservar. Recuérdale que este paquete ofrece una vigencia amplia y un plan diseñado para maximizar su experiencia de vacaciones con el menor esfuerzo posible."
+if menu == "💵 Comisiones":
+    st.title("💵 Comisiones")
+    if os.path.exists(SALES_FILE):
+        df = pd.read_csv(SALES_FILE)
+        if not df.empty:
+            total = df["Comisión"].astype(float).sum()
+            st.metric(
+                "Total Comisiones",
+                f"${total:,.2f}"
             )
         else:
-            st.write(
-                "El cliente no cumple los requisitos para los paquetes preferenciales en este momento. Ofrece la alternativa MIX & MATCH, destacando los beneficios del plan y la posibilidad de mantener el interés mientras se busca una opción adecuada."
-            )
+            st.info("No hay ventas registradas aún.")
+    else:
+        st.info("No hay ventas registradas aún.")
 
-    with col2:
-        st.subheader("Comisión")
-        st.markdown(f"**Total:** ${total:,.2f} USD")
-        st.markdown(f"**Ganancia por unidad:** ${ganancia:,.2f}")
+# =========================================================
+# CONFIGURACIÓN
+# =========================================================
 
-        st.markdown("---")
-        if st.session_state["message"]:
-            st.success(st.session_state["message"])
+if menu == "⚙️ Configuración":
+    st.title("⚙️ Configuración Empresa")
+    st.json(horarios)
 
-st.markdown(
-"""
-### Acerca de la aplicación
-Esta herramienta ayuda a los asesores a evaluar clientes y registrar cada venta con la información clave: nombre, estado, edad, residencia, destino, hotel, paquete y comisiones.
-"""
-)
+# =========================================================
+# ADMIN USUARIOS
+# =========================================================
+
+if st.session_state.rol == "admin":
+    if admin_menu == "👥 Usuarios":
+        st.title("👥 Usuarios")
+        nuevo_usuario = st.text_input("Nuevo usuario", key="new_user")
+        nueva_pass = st.text_input("Nueva contraseña", type="password", key="new_user_password")
+        rol = st.selectbox(
+            "Rol",
+            [
+                "admin",
+                "asesor"
+            ],
+            key="new_user_rol"
+        )
+        if st.button("Crear Usuario", key="btn_crear_usuario"):
+            with open(USERS_FILE, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    nuevo_usuario,
+                    nueva_pass,
+                    rol
+                ])
+            st.success("Usuario creado")
+        if os.path.exists(USERS_FILE):
+            usuarios = pd.read_csv(USERS_FILE)
+            st.dataframe(usuarios)
+    if admin_menu == "📜 Historial":
+        st.title("📜 Historial Completo")
+        if os.path.exists(SALES_FILE):
+            ventas = pd.read_csv(SALES_FILE)
+            st.dataframe(ventas, use_container_width=True)
+        else:
+            st.info("No hay ventas registradas aún.")

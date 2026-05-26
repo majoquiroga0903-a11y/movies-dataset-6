@@ -1,0 +1,17 @@
+{
+  "juanpablo": {
+    "name": "Juan Pablo",
+    "role": "asesor",
+    "password": "asesor2026"
+  },
+  "mariajose": {
+    "name": "María José",
+    "role": "admin",
+    "password": "admin2026"
+  },
+  "Andrea": {
+    "name": "Andrea Boccelli",
+    "role": "asesor",
+    "password": "asesor2026"
+  }
+}
