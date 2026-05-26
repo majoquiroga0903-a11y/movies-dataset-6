@@ -219,6 +219,7 @@ def hijos_validos_mix(edades):
     return True
 
 
+
 def compute_package(
     estado_civil,
     edad,
@@ -486,30 +487,22 @@ cantidad_hijos = st.sidebar.number_input(
     "Cantidad de hijos",
     0,
     10,
+    0,
     key="cantidad_hijos"
 )
 
-edades_hijos_str = st.sidebar.text_input(
-    "Edades de los hijos (separadas por coma)",
-    key="edades_hijos_str",
-    help="Ejemplo: 5, 8, 12"
-)
-
-edades_hijos = parse_edades_hijos(edades_hijos_str)
-edades_hijos_invalid = edades_hijos is None
-if edades_hijos_invalid:
-    edades_hijos = []
-
+edades_hijos = []
 valid_edades_hijos = True
 if cantidad_hijos > 0:
-    if edades_hijos_invalid:
-        st.sidebar.warning("Ingrese edades válidas separadas por coma, por ejemplo: 5, 8, 12.")
-        valid_edades_hijos = False
-    elif len(edades_hijos) != cantidad_hijos:
-        st.sidebar.warning(
-            f"La cantidad de edades ingresadas ({len(edades_hijos)}) no coincide con el número de hijos ({cantidad_hijos})."
+    st.sidebar.markdown("### Edades de los hijos")
+    for i in range(cantidad_hijos):
+        edad_hijo = st.sidebar.number_input(
+            f"Edad hijo {i+1}",
+            0,
+            25,
+            key=f"hijo_{i}"
         )
-        valid_edades_hijos = False
+        edades_hijos.append(edad_hijo)
 
 st.sidebar.markdown("---")
 st.sidebar.button("Limpiar formulario", on_click=reset_form)
