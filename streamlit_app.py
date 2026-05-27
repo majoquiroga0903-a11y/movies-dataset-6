@@ -2,6 +2,7 @@ import csv
 import os
 from datetime import datetime
 
+import json
 import pandas as pd
 import streamlit as st
 
@@ -81,6 +82,7 @@ st.markdown("""
 SALES_FILE = "ventas.csv"
 USERS_FILE = "usuarios.csv"
 CLIENTS_FILE = "clientes.csv"
+CONFIG_FILE = "config.json"
 
 # =========================================================
 # ESTADOS
@@ -236,6 +238,52 @@ crear_archivo(
 )
 
 # =========================================================
+# CONFIG JSON
+# =========================================================
+
+def load_json(path, default):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
+    return default
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def cargar_config():
+    default = {
+        "horarios": horarios,
+        "zonas": zonas,
+        "porcentaje_default": 0.06,
+        "reglas_calificacion": {
+            "VDL": "Residente + Casado/Convive + hijos hasta 11 años",
+            "HÍBRIDO": "Mujer Soltera, Divorciado o rango extendido",
+            "MIX & MATCH": "Edad >= 18 y hijos hasta 17 años"
+        }
+    }
+    config = load_json(CONFIG_FILE, default)
+    config["horarios"] = config.get("horarios", horarios)
+    config["zonas"] = config.get("zonas", zonas)
+    config["porcentaje_default"] = config.get("porcentaje_default", 0.06)
+    config["reglas_calificacion"] = config.get("reglas_calificacion", default["reglas_calificacion"])
+    return config
+
+
+def guardar_config(config):
+    save_json(CONFIG_FILE, config)
+
+
+CONFIG = cargar_config()
+horarios = CONFIG.get("horarios", horarios)
+zonas = CONFIG.get("zonas", zonas)
+
+# =========================================================
 # LOGIN
 # =========================================================
 
@@ -258,9 +306,22 @@ def cargar_usuarios():
                     usuarios[key] = {
                         "password": row.get("Password", ""),
                         "rol": row.get("Rol", "asesor"),
-                        "name": row.get("Usuario", row.get("Usuario", key))
+                        "name": row.get("Usuario", key)
                     }
     return usuarios
+
+
+def guardar_usuarios():
+    with open(USERS_FILE, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Usuario", "Password", "Rol"])
+        for username, info in USERS.items():
+            writer.writerow([
+                username,
+                info.get("password", ""),
+                info.get("rol", "asesor")
+            ])
+
 
 USERS = cargar_usuarios()
 
@@ -294,9 +355,15 @@ if not st.session_state.login:
 # SIDEBAR
 # =========================================================
 
-menu = st.sidebar.radio(
-    "Panel",
-    [
+menu_options = [
+    "💰 Ventas",
+    "📞 Clientes",
+    "🏨 Hoteles",
+    "📦 Paquetes"
+]
+
+if st.session_state.rol == "admin":
+    menu_options = [
         "📊 Dashboard",
         "💰 Ventas",
         "📞 Clientes",
@@ -305,7 +372,11 @@ menu = st.sidebar.radio(
         "📈 Estadísticas",
         "💵 Comisiones",
         "⚙️ Configuración"
-    ],
+    ]
+
+menu = st.sidebar.radio(
+    "Panel",
+    menu_options,
     key="menu_panel"
 )
 
@@ -484,27 +555,11 @@ if menu == "💰 Ventas":
     with col1:
         st.subheader("Resultado")
         if paquete == "VDL":
-            st.markdown(f"""
-            <div class="box aprobado">
-            ✅ CALIFICA PARA VDL
-
-            <br><br>
-            Vigencia:
-            {vigencia}
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"✅ CALIFICA PARA VDL — Vigencia: {vigencia}")
         elif paquete == "HÍBRIDO":
-            st.markdown(f"""
-            <div class="box aprobado">
-            ✅ CALIFICA PARA HÍBRIDO
-            </div>
-            """, unsafe_allow_html=True)
+            st.success("✅ CALIFICA PARA HÍBRIDO")
         else:
-            st.markdown(f"""
-            <div class="box denegado">
-            ⚠️ ENVIAR A MIX & MATCH
-            </div>
-            """, unsafe_allow_html=True)
+            st.warning("⚠️ ENVIAR A MIX & MATCH")
 
         st.subheader("Beneficios")
         for beneficio in beneficios:
@@ -539,12 +594,7 @@ if menu == "💰 Ventas":
 
         comision = deducible * (porcentaje / 100)
 
-        st.markdown(f"""
-        <div class="comision">
-        Comisión:
-        ${comision:,.2f}
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("Comisión estimada", f"${comision:,.2f}")
 
         if st.button("Registrar Venta", key="btn_registrar_venta"):
             with open(SALES_FILE, "a", newline="", encoding="utf-8") as f:
@@ -606,11 +656,7 @@ if menu == "📞 Clientes":
 if menu == "🏨 Hoteles":
     st.title("🏨 Hoteles y Resorts")
     for ciudad, lista in hoteles.items():
-        st.markdown(f"""
-        <div class="destino">
-        {ciudad}
-        </div>
-        """, unsafe_allow_html=True)
+        st.subheader(ciudad)
         for hotel in lista:
             st.write("🏨", hotel)
 
@@ -650,8 +696,38 @@ if menu == "📈 Estadísticas":
     st.title("📈 Estadísticas")
     if os.path.exists(SALES_FILE):
         df = pd.read_csv(SALES_FILE)
-        st.dataframe(df, use_container_width=True)
-        st.metric("Ventas Totales", len(df))
+        if not df.empty:
+            df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+            ventas_totales = len(df)
+            hoy = pd.Timestamp.now().normalize()
+            ventas_hoy = df[df["Fecha"] >= hoy].shape[0]
+            ingresos = df["Comisión"].astype(float).sum() if "Comisión" in df.columns else 0.0
+            mejor_asesor = df["Asesor"].value_counts().idxmax() if not df["Asesor"].empty else "N/A"
+            conversión = f"{(ventas_hoy / ventas_totales * 100):.1f}%" if ventas_totales else "0%"
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Ventas totales", ventas_totales)
+            col2.metric("Cierres del día", ventas_hoy)
+            col3.metric("Dinero entrado", f"${ingresos:,.2f}")
+            col4.metric("Mejor asesor", mejor_asesor)
+
+            st.markdown("---")
+            st.subheader("Desglose por asesor")
+            asesor_data = (
+                df.groupby("Asesor")["Comisión"].agg(["count", "sum"]).reset_index()
+                .rename(columns={"count": "Ventas", "sum": "Comisión Total"})
+            )
+            st.dataframe(asesor_data, use_container_width=True)
+            st.bar_chart(asesor_data.set_index("Asesor")["Ventas"])
+
+            st.markdown("---")
+            st.subheader("Ventas por fecha")
+            daily = df.groupby(df["Fecha"].dt.date).size().reset_index(name="Ventas")
+            daily.columns = ["Fecha", "Ventas"]
+            st.line_chart(daily.set_index("Fecha"))
+            st.markdown(f"**Porcentaje de conversión**: {conversión}")
+        else:
+            st.info("No hay ventas registradas aún.")
     else:
         st.info("No hay ventas registradas aún.")
 
@@ -664,11 +740,17 @@ if menu == "💵 Comisiones":
     if os.path.exists(SALES_FILE):
         df = pd.read_csv(SALES_FILE)
         if not df.empty:
-            total = df["Comisión"].astype(float).sum()
-            st.metric(
-                "Total Comisiones",
-                f"${total:,.2f}"
+            df["Comisión"] = df["Comisión"].astype(float)
+            total = df["Comisión"].sum()
+            asesor_totales = (
+                df.groupby("Asesor")["Comisión"].agg(["sum", "count"]).reset_index()
+                .rename(columns={"sum": "Comisión Total", "count": "Ventas"})
             )
+            st.metric("Comisión total", f"${total:,.2f}")
+            st.subheader("Comisiones por asesor")
+            st.dataframe(asesor_totales, use_container_width=True)
+            st.subheader("Ventas individuales")
+            st.dataframe(df[["Fecha", "Cliente", "Asesor", "Paquete", "Comisión"]], use_container_width=True)
         else:
             st.info("No hay ventas registradas aún.")
     else:
@@ -680,7 +762,52 @@ if menu == "💵 Comisiones":
 
 if menu == "⚙️ Configuración":
     st.title("⚙️ Configuración Empresa")
-    st.json(horarios)
+    st.subheader("Horarios por zona")
+    nueva_horarios = {}
+    for zona, hora in sorted(CONFIG["horarios"].items()):
+        nueva_horarios[zona] = st.text_input(f"Horario {zona}", value=hora, key=f"config_hora_{zona}")
+
+    st.subheader("Zonas comunes")
+    zonas_text = st.text_area(
+        "Mapa de zonas (estado: zona)",
+        value=json.dumps(CONFIG["zonas"], ensure_ascii=False, indent=2),
+        height=220,
+        key="config_zonas"
+    )
+
+    st.subheader("Porcentaje de comisión por defecto")
+    porcentaje_def = st.number_input(
+        "Porcentaje (%)",
+        0.0,
+        100.0,
+        value=CONFIG.get("porcentaje_default", 0.06) * 100,
+        key="config_porcentaje_default"
+    )
+
+    st.subheader("Reglas de calificación")
+    reglas = CONFIG["reglas_calificacion"]
+    regla_vdl = st.text_area("VDL", value=reglas.get("VDL", ""), key="config_regla_vdl")
+    regla_hibrido = st.text_area("HÍBRIDO", value=reglas.get("HÍBRIDO", ""), key="config_regla_hibrido")
+    regla_mix = st.text_area("MIX & MATCH", value=reglas.get("MIX & MATCH", ""), key="config_regla_mix")
+
+    if st.button("Guardar configuración", key="config_guardar"):
+        CONFIG["horarios"] = nueva_horarios
+        try:
+            CONFIG["zonas"] = json.loads(zonas_text)
+        except json.JSONDecodeError:
+            st.error("Zona mapping debe ser JSON válido")
+        else:
+            CONFIG["porcentaje_default"] = porcentaje_def / 100
+            CONFIG["reglas_calificacion"] = {
+                "VDL": regla_vdl,
+                "HÍBRIDO": regla_hibrido,
+                "MIX & MATCH": regla_mix
+            }
+            guardar_config(CONFIG)
+            st.success("Configuración guardada")
+
+    st.markdown("---")
+    st.write("La configuración se guarda en `config.json`. No se cambia la información de venta, solo la forma en que se presentan horarios y reglas.")
 
 # =========================================================
 # ADMIN USUARIOS
@@ -689,9 +816,18 @@ if menu == "⚙️ Configuración":
 if st.session_state.rol == "admin":
     if admin_menu == "👥 Usuarios":
         st.title("👥 Usuarios")
-        nuevo_usuario = st.text_input("Nuevo usuario", key="new_user")
-        nueva_pass = st.text_input("Nueva contraseña", type="password", key="new_user_password")
-        rol = st.selectbox(
+        st.markdown("**Usuarios existentes**")
+        usuarios_list = [
+            {"Usuario": username, "Rol": info.get("rol", "asesor")}
+            for username, info in USERS.items()
+        ]
+        st.dataframe(pd.DataFrame(usuarios_list), use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("Crear o actualizar usuario")
+        nuevo_usuario = st.text_input("Usuario", key="new_user")
+        nueva_pass = st.text_input("Contraseña", type="password", key="new_user_password")
+        rol_usuario = st.selectbox(
             "Rol",
             [
                 "admin",
@@ -699,18 +835,49 @@ if st.session_state.rol == "admin":
             ],
             key="new_user_rol"
         )
-        if st.button("Crear Usuario", key="btn_crear_usuario"):
-            with open(USERS_FILE, "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    nuevo_usuario,
-                    nueva_pass,
-                    rol
-                ])
-            st.success("Usuario creado")
-        if os.path.exists(USERS_FILE):
-            usuarios = pd.read_csv(USERS_FILE)
-            st.dataframe(usuarios)
+        if st.button("Guardar usuario", key="btn_guardar_usuario"):
+            if not nuevo_usuario:
+                st.error("Ingrese un nombre de usuario")
+            else:
+                USERS[nuevo_usuario.strip().lower()] = {
+                    "password": nueva_pass,
+                    "rol": rol_usuario,
+                    "name": nuevo_usuario.strip()
+                }
+                guardar_usuarios()
+                st.success("Usuario guardado")
+
+        st.markdown("---")
+        st.subheader("Modificar usuario")
+        usuario_seleccionado = st.selectbox(
+            "Seleccionar usuario",
+            sorted(USERS.keys()),
+            key="select_usuario"
+        )
+        if usuario_seleccionado:
+            datos = USERS[usuario_seleccionado]
+            st.write(f"Rol actual: {datos.get('rol')}")
+            nueva_rol = st.selectbox(
+                "Nuevo rol",
+                ["admin", "asesor"],
+                index=0 if datos.get("rol") == "admin" else 1,
+                key="modify_user_role"
+            )
+            nueva_clave = st.text_input("Nueva contraseña", type="password", key="modify_user_password")
+            if st.button("Actualizar usuario", key="btn_actualizar_usuario"):
+                if nueva_clave:
+                    USERS[usuario_seleccionado]["password"] = nueva_clave
+                USERS[usuario_seleccionado]["rol"] = nueva_rol
+                guardar_usuarios()
+                st.success("Usuario actualizado")
+            if usuario_seleccionado != st.session_state.usuario:
+                if st.button("Eliminar usuario", key="btn_eliminar_usuario"):
+                    USERS.pop(usuario_seleccionado, None)
+                    guardar_usuarios()
+                    st.success("Usuario eliminado")
+            else:
+                st.info("No puede eliminar su propia cuenta.")
+
     if admin_menu == "📜 Historial":
         st.title("📜 Historial Completo")
         if os.path.exists(SALES_FILE):
