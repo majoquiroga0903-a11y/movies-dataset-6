@@ -203,6 +203,21 @@ def crear_archivo(file, columnas):
             writer = csv.writer(f)
             writer.writerow(columnas)
 
+# Archivo de debug para eventos (no cambia datos de la app)
+DEBUG_LOG = "app_debug.log"
+
+
+def log_event(event, info=None):
+    try:
+        now = datetime.now().isoformat(sep=" ", timespec="seconds")
+        entry = {"ts": now, "event": event, "info": info}
+        with open(DEBUG_LOG, "a", encoding="utf-8") as df:
+            df.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        st.session_state["last_event"] = entry
+    except Exception:
+        # no debemos interrumpir la app por logging
+        pass
+
 crear_archivo(
     SALES_FILE,
     [
@@ -344,8 +359,10 @@ if st.sidebar.button("Ingresar", key="login_button"):
         st.session_state.usuario = usuario_key
         st.session_state.name = usuario_info.get("name", usuario_key)
         st.session_state.rol = usuario_info.get("rol", "asesor")
+        log_event("login_success", {"usuario": usuario_key})
     else:
         st.sidebar.error("Usuario incorrecto")
+        log_event("login_failed", {"usuario": usuario_key})
 
 if not st.session_state.login:
     st.warning("Inicia sesión")
@@ -597,21 +614,26 @@ if menu == "💰 Ventas":
         st.metric("Comisión estimada", f"${comision:,.2f}")
 
         if st.button("Registrar Venta", key="btn_registrar_venta"):
-            with open(SALES_FILE, "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    datetime.now().isoformat(sep=" ", timespec="seconds"),
-                    cliente,
-                    st.session_state.name,
-                    paquete,
-                    estado,
-                    edad,
-                    estado_civil,
-                    residencia,
-                    cantidad_hijos,
-                    comision
-                ])
-            st.success("Venta registrada correctamente")
+            try:
+                with open(SALES_FILE, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([
+                        datetime.now().isoformat(sep=" ", timespec="seconds"),
+                        cliente,
+                        st.session_state.name,
+                        paquete,
+                        estado,
+                        edad,
+                        estado_civil,
+                        residencia,
+                        cantidad_hijos,
+                        comision
+                    ])
+                st.success("Venta registrada correctamente")
+                log_event("registrar_venta", {"cliente": cliente, "asesor": st.session_state.name, "paquete": paquete})
+            except Exception as e:
+                st.error("Error al registrar la venta")
+                log_event("registrar_venta_error", {"error": str(e)})
 
 # =========================================================
 # CLIENTES
@@ -634,14 +656,19 @@ if menu == "📞 Clientes":
     )
 
     if st.button("Guardar Cliente", key="btn_guardar_cliente"):
-        with open(CLIENTS_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                cliente,
-                telefono,
-                seguimiento
-            ])
-        st.success("Cliente guardado")
+        try:
+            with open(CLIENTS_FILE, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    cliente,
+                    telefono,
+                    seguimiento
+                ])
+            st.success("Cliente guardado")
+            log_event("guardar_cliente", {"cliente": cliente, "telefono": telefono, "seguimiento": seguimiento})
+        except Exception as e:
+            st.error("Error al guardar cliente")
+            log_event("guardar_cliente_error", {"error": str(e)})
 
     if os.path.exists(CLIENTS_FILE):
         df = pd.read_csv(CLIENTS_FILE)
@@ -796,6 +823,7 @@ if menu == "⚙️ Configuración":
             CONFIG["zonas"] = json.loads(zonas_text)
         except json.JSONDecodeError:
             st.error("Zona mapping debe ser JSON válido")
+            log_event("config_error", {"error": "zonas JSON inválido"})
         else:
             CONFIG["porcentaje_default"] = porcentaje_def / 100
             CONFIG["reglas_calificacion"] = {
@@ -805,6 +833,7 @@ if menu == "⚙️ Configuración":
             }
             guardar_config(CONFIG)
             st.success("Configuración guardada")
+            log_event("guardar_config", {"porcentaje_default": CONFIG.get("porcentaje_default")})
 
     st.markdown("---")
     st.write("La configuración se guarda en `config.json`. No se cambia la información de venta, solo la forma en que se presentan horarios y reglas.")
@@ -846,6 +875,7 @@ if st.session_state.rol == "admin":
                 }
                 guardar_usuarios()
                 st.success("Usuario guardado")
+                log_event("guardar_usuario", {"usuario": nuevo_usuario.strip().lower(), "rol": rol_usuario})
 
         st.markdown("---")
         st.subheader("Modificar usuario")
@@ -870,11 +900,13 @@ if st.session_state.rol == "admin":
                 USERS[usuario_seleccionado]["rol"] = nueva_rol
                 guardar_usuarios()
                 st.success("Usuario actualizado")
+                log_event("actualizar_usuario", {"usuario": usuario_seleccionado, "new_rol": nueva_rol})
             if usuario_seleccionado != st.session_state.usuario:
                 if st.button("Eliminar usuario", key="btn_eliminar_usuario"):
                     USERS.pop(usuario_seleccionado, None)
                     guardar_usuarios()
                     st.success("Usuario eliminado")
+                    log_event("eliminar_usuario", {"usuario": usuario_seleccionado})
             else:
                 st.info("No puede eliminar su propia cuenta.")
 
